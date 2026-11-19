@@ -1,6 +1,7 @@
 package com.example.urlshortener.auth;
 
 import com.example.urlshortener.user.User;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,5 +38,14 @@ public class JwtService {
 
     public long expiresInSeconds() {
         return expirationMinutes * 60;
+    }
+
+    public Long extractUserId(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        return Long.valueOf(claims.getSubject());
     }
 }

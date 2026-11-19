@@ -33,6 +33,9 @@ public class Link {
     @Column(name = "click_count", nullable = false)
     private long clickCount;
 
+    @Column(name = "user_id")
+    private Long userId;
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
