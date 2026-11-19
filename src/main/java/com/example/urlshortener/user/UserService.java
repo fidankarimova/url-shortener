@@ -27,4 +27,16 @@ public class UserService {
             throw new EmailAlreadyExistsException(normalizedEmail);
         }
     }
+
+    public User authenticate(String email, String rawPassword) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+        User user = repository.findByEmail(normalizedEmail)
+                .orElseThrow(InvalidCredentialsException::new);
+
+        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        return user;
+    }
 }
