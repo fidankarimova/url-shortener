@@ -30,6 +30,10 @@ class LinkServiceTest {
     @InjectMocks
     private LinkService service;
 
+    @Mock
+    private LinkCache cache;
+
+
     @Test
     void create_savesLinkWithGeneratedCodeAndOwner() {
         when(generator.generate()).thenReturn("abc1234");
@@ -106,4 +110,35 @@ class LinkServiceTest {
 
         verify(repository, never()).delete(any(Link.class));
     }
+
+    @Test
+    void resolve_returnsCachedValueWithoutHittingDatabase() {
+        when(cache.get("abc1234")).thenReturn(Optional.of("https://cached.com"));
+
+        assertThat(service.resolve("abc1234")).isEqualTo("https://cached.com");
+
+        verify(repository, never()).findByShortCode(any());
+    }
+
+    @Test
+    void resolve_populatesCacheOnMiss() {
+        Link link = new Link();
+        link.setOriginalUrl("https://github.com");
+        when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(link));
+
+        service.resolve("abc1234");
+
+        verify(cache).put("abc1234", "https://github.com");
+    }
+
+    @Test
+    void delete_evictsCache() {
+        Link link = new Link();
+        when(repository.findByShortCodeAndUserId("abc1234", 1L)).thenReturn(Optional.of(link));
+
+        service.delete("abc1234", 1L);
+
+        verify(cache).evict("abc1234");
+    }
+
 }

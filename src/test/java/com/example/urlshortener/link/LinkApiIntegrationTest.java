@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -14,14 +15,19 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @Testcontainers
@@ -30,17 +36,24 @@ class LinkApiIntegrationTest {
     @Container
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16");
 
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>("redis:7").withExposedPorts(6379);
+
     @DynamicPropertySource
-    static void datasourceProperties(DynamicPropertyRegistry registry) {
+    static void properties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("app.rate-limit.requests-per-minute", () -> 10_000);
     }
 
     @Autowired private WebApplicationContext context;
     @Autowired private FilterChainProxy springSecurityFilterChain;
     @Autowired private LinkRepository linkRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private StringRedisTemplate redisTemplate;
 
     private MockMvc mockMvc;
 
@@ -49,6 +62,11 @@ class LinkApiIntegrationTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(springSecurityFilterChain)
                 .build();
+
+        var keys = redisTemplate.keys("*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
         linkRepository.deleteAll();
         userRepository.deleteAll();
     }
@@ -138,10 +156,23 @@ class LinkApiIntegrationTest {
         mockMvc.perform(delete("/api/links/" + code).header("Authorization", bob))
                 .andExpect(status().isNotFound());
 
+        // Alice özü silə bilir
+        mockMvc.perform(get("/" + code)).andExpect(status().isFound());   // cache-ə düşür
         mockMvc.perform(delete("/api/links/" + code).header("Authorization", alice))
                 .andExpect(status().isNoContent());
+        mockMvc.perform(get("/" + code)).andExpect(status().isNotFound()); // cache də təmizlənib
+    }
 
-        mockMvc.perform(get("/" + code)).andExpect(status().isNotFound());
+    @Test
+    void redirectIsCachedInRedis() throws Exception {
+        String bearer = registerAndLogin("a@test.com");
+        String code = createLink(bearer, "https://github.com");
+
+        assertThat(redisTemplate.opsForValue().get("link:" + code)).isNull();
+
+        mockMvc.perform(get("/" + code)).andExpect(status().isFound());
+
+        assertThat(redisTemplate.opsForValue().get("link:" + code)).isEqualTo("https://github.com");
     }
 
     @Test

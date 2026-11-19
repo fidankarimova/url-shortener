@@ -15,10 +15,18 @@ spring:
     web:
       pageable:
         max-page-size: 50
+    redis:
+      host: localhost
+      port: 6379
 app:
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-dev-only-secret-change-me}
     expiration-minutes: 60
+  cache:
+    link-ttl-minutes: 60
+  rate-limit:
+    requests-per-minute: 30
+
 
 management:
   endpoints:

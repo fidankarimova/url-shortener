@@ -17,6 +17,7 @@ public class LinkService {
 
     private final LinkRepository repository;
     private final ShortCodeGenerator generator;
+    private final LinkCache cache;
 
     public Link create(String originalUrl, Long userId) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -33,22 +34,25 @@ public class LinkService {
         throw new IllegalStateException("Could not generate a unique short code");
     }
 
-    @Transactional(readOnly = true)
     public String resolve(String shortCode) {
-        return repository.findByShortCode(shortCode)
-                .map(Link::getOriginalUrl)
+        return cache.get(shortCode).orElseGet(() -> {
+            String url = repository.findByShortCode(shortCode)
+                    .map(Link::getOriginalUrl)
+                    .orElseThrow(() -> new LinkNotFoundException(shortCode));
+            cache.put(shortCode, url);
+            return url;
+        });
+    }
+
+    public void delete(String shortCode, Long userId) {
+        Link link = repository.findByShortCodeAndUserId(shortCode, userId)
                 .orElseThrow(() -> new LinkNotFoundException(shortCode));
+        repository.delete(link);
+        cache.evict(shortCode);
     }
 
     @Transactional(readOnly = true)
     public Page<Link> findByOwner(Long userId, Pageable pageable) {
         return repository.findByUserId(userId, pageable);
-    }
-
-    @Transactional
-    public void delete(String shortCode, Long userId) {
-        Link link = repository.findByShortCodeAndUserId(shortCode, userId)
-                .orElseThrow(() -> new LinkNotFoundException(shortCode));
-        repository.delete(link);
     }
 }
