@@ -28,7 +28,7 @@ public class LinkService {
             try {
                 return repository.save(link);
             } catch (DataIntegrityViolationException e) {
-                // Eyni kod artıq var, yenisini yoxla
+                // short code collision, retry with a new one
             }
         }
         throw new IllegalStateException("Could not generate a unique short code");

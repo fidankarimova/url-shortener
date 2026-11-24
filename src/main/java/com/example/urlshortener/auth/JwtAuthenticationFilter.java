@@ -34,7 +34,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(userId, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException e) {
-                // Token səhvdir və ya bitib: heç nə qeyd etmirik, istifadəçi anonim qalır
+                // invalid or expired token: leave the request anonymous
             }
         }
 

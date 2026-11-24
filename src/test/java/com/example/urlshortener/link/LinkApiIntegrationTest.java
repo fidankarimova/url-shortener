@@ -156,11 +156,11 @@ class LinkApiIntegrationTest {
         mockMvc.perform(delete("/api/links/" + code).header("Authorization", bob))
                 .andExpect(status().isNotFound());
 
-        // Alice özü silə bilir
-        mockMvc.perform(get("/" + code)).andExpect(status().isFound());   // cache-ə düşür
+        // the owner can delete it
+        mockMvc.perform(get("/" + code)).andExpect(status().isFound());   // populates the cache
         mockMvc.perform(delete("/api/links/" + code).header("Authorization", alice))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/" + code)).andExpect(status().isNotFound()); // cache də təmizlənib
+        mockMvc.perform(get("/" + code)).andExpect(status().isNotFound()); // cache entry was evicted too
     }
 
     @Test

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# İstifadə: ./smoke-test.sh [BASE_URL]
+# usage: ./smoke-test.sh [BASE_URL]
 BASE="${1:-http://localhost:8080}"
 EMAIL="smoke$(date +%s)@test.com"
 PASS="supersecret123"
 FAIL=0
 
-check() {  # check "ad" gözlənilən_kod faktiki_kod
-  if [ "$2" = "$3" ]; then echo "OK    $1 ($3)"; else echo "FAIL  $1 (gözlənilən $2, gələn $3)"; FAIL=1; fi
+check() {  # check "name" expected actual
+  if [ "$2" = "$3" ]; then echo "OK    $1 ($3)"; else echo "FAIL  $1 (expected $2, got $3)"; FAIL=1; fi
 }
 
 code() { curl -s $CURL_OPTS -o /dev/null -w "%{http_code}" "$@"; }
@@ -21,7 +21,7 @@ check "wrong password" 401 "$(code -X POST $BASE/api/auth/login \
 
 TOKEN=$(curl -s $CURL_OPTS -X POST $BASE/api/auth/login -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}" | grep -o '"accessToken":"[^"]*' | cut -d'"' -f4)
-[ -n "$TOKEN" ] && echo "OK    login (token alındı)" || { echo "FAIL  login (token yoxdur)"; FAIL=1; }
+[ -n "$TOKEN" ] && echo "OK    login (token received)" || { echo "FAIL  login (no token)"; FAIL=1; }
 
 check "create without token" 401 "$(code -X POST $BASE/api/links \
   -H 'Content-Type: application/json' -d '{"url":"https://github.com"}')"
@@ -45,5 +45,5 @@ check "delete" 204 "$(code -X DELETE $BASE/api/links/$CODE -H "Authorization: Be
 check "redirect after delete" 404 "$(code $BASE/$CODE)"
 
 echo
-[ $FAIL -eq 0 ] && echo "Hamısı keçdi" || echo "Xətalar var"
+[ $FAIL -eq 0 ] && echo "All checks passed" || echo "Some checks failed"
 exit $FAIL
